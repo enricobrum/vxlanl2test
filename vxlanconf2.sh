@@ -1,31 +1,43 @@
 #!/bin/bash
 
 # Usage:
-# sudo ./vxlan_bridge_setup.sh -i enp0s8 -v 42 -s 10.10.10.0/24 -x 1 [-r 192.168.56.2] [-e tap0,veth1]
+# sudo ./vxlan_bridge_setup.sh -i enp0s8 -v 42 -s 10.10.10.0/24 -x 1 [-r 192.168.56.2] [-e tap0,veth1] [-q]
 
 set -e
 
 # Default
 VXLAN_PORT=4789
 MULTICAST_GROUP="239.1.1.1"
+START_QUECTEL=false
 
 # Arg parsing
-while getopts ":i:v:s:x:r:e:" opt; do
+while getopts ":i:v:s:x:r:e:q" opt; do
   case $opt in
-    i) PHYS_IF=$OPTARG ;;                  # Interfaccia fisica (es. enp0s8)
-    v) VXLAN_ID=$OPTARG ;;                 # ID VXLAN
-    s) SUBNET=$OPTARG ;;                   # Subnet (es. 10.10.10.0/24)
-    x) HOST_ID=$OPTARG ;;                  # Host ID (es. 1)
-    r) REMOTE_IP=$OPTARG ;;                # Remote endpoint (unicast)
-    e) EXTRA_IFS=$OPTARG ;;                # Altre interfacce da aggiungere al bridge (separate da virgola)
+    i) PHYS_IF=$OPTARG ;;
+    v) VXLAN_ID=$OPTARG ;;
+    s) SUBNET=$OPTARG ;;
+    x) HOST_ID=$OPTARG ;;
+    r) REMOTE_IP=$OPTARG ;;
+    e) EXTRA_IFS=$OPTARG ;;
+    q) START_QUECTEL=true ;;  # Attiva uso di quectel-CM
     \?) echo "Invalid option -$OPTARG" >&2; exit 1 ;;
   esac
 done
 
 # Verifica param obbligatori
 if [[ -z "$PHYS_IF" || -z "$VXLAN_ID" || -z "$SUBNET" || -z "$HOST_ID" ]]; then
-  echo "Uso: $0 -i <if> -v <vxlan_id> -s <subnet> -x <host_id> [-r <remote_ip>] [-e <if1,if2>]"
+  echo "Uso: $0 -i <if> -v <vxlan_id> -s <subnet> -x <host_id> [-r <remote_ip>] [-e <if1,if2>] [-q]"
   exit 1
+fi
+
+# Avvio Quectel-CM se richiesto
+if $START_QUECTEL; then
+  echo "[*] Avvio del modulo Quectel con quectel-CM..."
+  sudo pkill quectel-CM || true
+  sleep 1
+  sudo nohup quectel-CM -s internet > /tmp/quectel.log 2>&1 &
+  sleep 5
+  echo "[✓] Processo quectel-CM avviato. Verifica: tail -f /tmp/quectel.log"
 fi
 
 # Derivazione nomi
