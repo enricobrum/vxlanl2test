@@ -63,23 +63,30 @@ def iperf3_test():
         ip = input("Server IP: ")
         duration = input("Duration (sec): ")
         dscp = input("DSCP value (0–63): ")
-        command = f"iperf3 -c {ip} -t {duration} --tos {int(dscp) << 2}"
+        command = f"iperf3 -c {ip} -t {duration} --tos 184"
         output = run_command(command)
         log_result("iPerf3", "Client", "-", command, output[:200])
         save_output_log("iperf3_client", output)
-
+        
+def iperf3_test_crit():
+        ip = input("Server IP: ")
+        duration = input("Duration (sec): ")
+        command = f"iperf3 -c {ip} -t {duration} --tos 192"
+        output = run_command(command)
+        log_result("iPerf3", "Client-Critical", "-", command, output[:200])
+        save_output_log("iperf3_client_critical", output)
+        
 def nping_test():
     role = input("Client or Server? [c/s]: ").lower()
     if role == 's':
-        command = "sudo nping --echo-server -e vxlan42"
+        command = 'sudo nping "public" --echo-server -e vxlan42'
         output = run_command(command)
         log_result("Nping", "Server", "-", command, output[:200])
         save_output_log("nping_server", output)
     else:
         ip = input("Server IP: ")
-        dscp = input("DSCP value (0–63): ")
         count = input("Ping count: ")
-        command = f"sudo nping --echo-client --count {count} --data-length 10 --tos {int(dscp) << 2} {ip}"
+        command = f'sudo nping "public" --echo-client --count {count} --data-length 10 --tos 184'
         output = run_command(command)
         log_result("Nping", "Client", "-", command, output[:200])
         save_output_log("nping_client", output)
@@ -89,7 +96,8 @@ def menu():
     print("1) Layer 2 (VXLAN) Echo Test")
     print("2) iperf3 Throughput Test")
     print("3) nping DSCP Echo Test")
-    print("4) Exit\n")
+    print("4) iperf3 Critical DSCP Test")
+    print("5) Exit\n")
     choice = input("Choose an option: ")
     return choice
 
@@ -104,5 +112,6 @@ if __name__ == "__main__":
         if choice=="1": l2_test()
         elif choice=="2": iperf3_test()
         elif choice=="3": nping_test()
-        elif choice=="4": print("Exiting."); break
+        elif choice=="4": iperf3_test_crit()
+        elif choice=="5": print("Exiting."); break
         else: print("Invalid choice.")
