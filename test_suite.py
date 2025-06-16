@@ -17,7 +17,7 @@ def log_result(test_type, role, interface, command, result_summary):
 
 def run_command(command):
     try:
-        print(f"\n→ Running: {command}")
+        print(f"\nRunning: {command}")
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
         output = result.stdout.strip()
         print(output)
@@ -102,7 +102,7 @@ def menu():
     return choice
 
 if __name__ == "__main__":
-    print(" Starting Interactive Test Suite")
+    print("Starting Interactive Test Suite")
     with open(csv_file, mode='w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(["Timestamp", "TestType", "Role", "Interface", "Command", "ResultSummary"])
