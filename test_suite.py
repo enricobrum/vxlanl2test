@@ -25,18 +25,32 @@ def run_command(command):
     except Exception as e:
         return str(e)
 
+def save_output_log(prefix, output):
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_path = os.path.join(CSV_DIR, f"{prefix}_log_{timestamp}.txt")
+    with open(log_path, 'w') as f:
+        f.write(output)
+        
 def l2_test():
     role = input("Client or Server? [c/s]: ").lower()
     interface = input("Enter interface for L2 test (e.g., vxlan0): ")
+    ethertype = input("Enter EtherType (e.g., 0x88B5): ")
+
     if role == 's':
-        command = f"sudo python3 l2_server.py --iface {interface}"
+        command = f"sudo python3 l2_server.py {interface} {ethertype}"
         output = run_command(command)
         log_result("L2", "Server", interface, command, output[:200])
+        save_output_log("l2_server", output)
     else:
-        ip = input("Server IP: ")
-        command = f"sudo python3 l2_client.py --iface {interface} --ip {ip}"
+        dst_mac = input("Destination MAC address (e.g., aa:bb:cc:dd:ee:ff): ")
+        payload = input("Payload (e.g., Hello): ")
+        count = input("How many frames to send?: ")
+        interval = input("Interval between frames (sec): ")
+
+        command = f"sudo python3 l2_client.py {interface} {dst_mac} {ethertype} \"{payload}\" {count} {interval}"
         output = run_command(command)
         log_result("L2", "Client", interface, command, output[:200])
+        save_output_log("l2_client", output)
 
 def iperf3_test():
     role = input("Client or Server? [c/s]: ").lower()
@@ -44,6 +58,7 @@ def iperf3_test():
         command = "iperf3 -s"
         output = run_command(command)
         log_result("iPerf3", "Server", "-", command, output[:200])
+        save_output_log("iperf3_server", output)
     else:
         ip = input("Server IP: ")
         duration = input("Duration (sec): ")
@@ -51,13 +66,15 @@ def iperf3_test():
         command = f"iperf3 -c {ip} -t {duration} --tos {int(dscp) << 2}"
         output = run_command(command)
         log_result("iPerf3", "Client", "-", command, output[:200])
+        save_output_log("iperf3_client", output)
 
 def nping_test():
     role = input("Client or Server? [c/s]: ").lower()
     if role == 's':
-        command = "sudo nping --echo-server"
+        command = "sudo nping --echo-server -e vxlan42"
         output = run_command(command)
         log_result("Nping", "Server", "-", command, output[:200])
+        save_output_log("nping_server", output)
     else:
         ip = input("Server IP: ")
         dscp = input("DSCP value (0–63): ")
@@ -65,9 +82,10 @@ def nping_test():
         command = f"sudo nping --echo-client --count {count} --data-length 10 --tos {int(dscp) << 2} {ip}"
         output = run_command(command)
         log_result("Nping", "Client", "-", command, output[:200])
-
+        save_output_log("nping_client", output)
+        
 def menu():
-    print("\n🧪 5G + VXLAN Test Suite")
+    print("\n 5G + VXLAN Test Suite")
     print("1) Layer 2 (VXLAN) Echo Test")
     print("2) iperf3 Throughput Test")
     print("3) nping DSCP Echo Test")
@@ -76,15 +94,15 @@ def menu():
     return choice
 
 if __name__ == "__main__":
-    print("⚙️ Starting Interactive Test Suite")
+    print(" Starting Interactive Test Suite")
     with open(csv_file, mode='w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(["Timestamp", "TestType", "Role", "Interface", "Command", "ResultSummary"])
 
     while True:
-        match menu():
-            case "1": l2_test()
-            case "2": iperf3_test()
-            case "3": nping_test()
-            case "4": print("Exiting."); break
-            case _: print("Invalid choice.")
+        choice=menu()
+        if choice=="1": l2_test()
+        elif choice=="2": iperf3_test()
+        elif choice=="3": nping_test()
+        elif choice=="4": print("Exiting."); break
+        else: print("Invalid choice.")
