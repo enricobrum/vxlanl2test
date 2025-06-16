@@ -62,7 +62,8 @@ def iperf3_test():
     else:
         ip = input("Server IP: ")
         duration = input("Duration (sec): ")
-        dscp = input("DSCP value (0–63): ")
+        # Using TOS 184 for DSCP EF (Expedited Forwarding)
+        # TOS 184 corresponds to DSCP 46 (EF)
         command = f"iperf3 -c {ip} -t {duration} --tos 184"
         output = run_command(command)
         log_result("iPerf3", "Client", "-", command, output[:200])
@@ -72,6 +73,8 @@ def iperf3_test_crit():
         ip = input("Server IP: ")
         duration = input("Duration (sec): ")
         command = f"iperf3 -c {ip} -t {duration} --tos 192"
+        # Using TOS 192 for DSCP CS6 (Critical)
+        # TOS 192 corresponds to DSCP 48 (CS6)
         output = run_command(command)
         log_result("iPerf3", "Client-Critical", "-", command, output[:200])
         save_output_log("iperf3_client_critical", output)
