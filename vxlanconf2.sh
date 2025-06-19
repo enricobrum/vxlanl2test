@@ -87,8 +87,8 @@ for extra_if in "${EXTRAS[@]}"; do
   fi
 done
 
-# IP al bridge
-sudo ip addr add $IP_ADDR/24 dev $BR_IF
+# IP alla VXLAN
+sudo ip addr add $IP_ADDR/24 dev $VXLAN_IF
 
 # Assicura l'interfaccia fisica sia attiva
 sudo ip link set $PHYS_IF up
