@@ -1,96 +1,42 @@
 #!/bin/bash
 
-# Usage:
-# sudo ./vxlan_bridge_setup.sh -i enp0s8 -v 42 -s 10.10.10.0/24 -x 1 [-r 192.168.56.2] [-e tap0,veth1] [-q]
-
-set -e
-
-# Default
-VXLAN_PORT=4789
-MULTICAST_GROUP="239.1.1.1"
-START_QUECTEL=false
-
-# Arg parsing
-while getopts ":i:v:s:x:r:e:q" opt; do
-  case $opt in
-    i) PHYS_IF=$OPTARG ;;
-    v) VXLAN_ID=$OPTARG ;;
-    s) SUBNET=$OPTARG ;;
-    x) HOST_ID=$OPTARG ;;
-    r) REMOTE_IP=$OPTARG ;;
-    e) EXTRA_IFS=$OPTARG ;;
-    q) START_QUECTEL=true ;;  # Attiva uso di quectel-CM
-    \?) echo "Invalid option -$OPTARG" >&2; exit 1 ;;
-  esac
-done
-
-# Verifica param obbligatori
-if [[ -z "$PHYS_IF" || -z "$VXLAN_ID" || -z "$SUBNET" || -z "$HOST_ID" ]]; then
-  echo "Uso: $0 -i <if> -v <vxlan_id> -s <subnet> -x <host_id> [-r <remote_ip>] [-e <if1,if2>] [-q]"
-  exit 1
+# Verifica numero di argomenti
+if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+    echo "Uso: $0 <VXLAN_ID> <INTERFACCIA_FISICA> <BASE_IP/SUBNET> [NODE_ID]"
+    echo "Esempio: $0 42 enp0s8 10.10.10.0/24 3"
+    exit 1
 fi
 
-# Avvio Quectel-CM se richiesto
-if $START_QUECTEL; then
-  echo "[*] Avvio del modulo Quectel con quectel-CM..."
-  sudo pkill quectel-CM || true
-  sleep 1
-  sudo nohup quectel-CM -s internet > /tmp/quectel.log 2>&1 &
-  sleep 5
-  echo "[✓] Processo quectel-CM avviato. Verifica: tail -f /tmp/quectel.log"
-fi
+VXLAN_ID=$1
+PHYS_IF=$2
+BASE_IP_CIDR=$3
+NODE_ID=${4:-1}  # default NODE_ID = 1 se non specificato
+REMOTE_IP=$5
+LOCAL=$6
+# Parsing IP base e netmask
+IFS='/' read -r BASE_IP SUBNET <<< "$BASE_IP_CIDR"
+IFS='.' read -r IP1 IP2 IP3 IP4 <<< "$BASE_IP"
 
-# Derivazione nomi
+# Costruisci IP finale sostituendo l’ultimo byte con NODE_ID
+FINAL_IP="${IP1}.${IP2}.${IP3}.${NODE_ID}/${SUBNET}"
+
+# Nome interfaccia VXLAN
 VXLAN_IF="vxlan${VXLAN_ID}"
-BR_IF="br${VXLAN_ID}"
-IP_ADDR="$(echo $SUBNET | cut -d'/' -f1 | awk -F. -v id=$HOST_ID '{printf "%d.%d.%d.%d\n", $1, $2, $3, id}')"
-MAC_ADDR=$(printf "02:00:00:%02x:%02x:%02x" $VXLAN_ID 0 $HOST_ID)
 
-echo "[*] Configurazione VXLAN bridge"
-echo "    - Dev fisico : $PHYS_IF"
-echo "    - VXLAN ID   : $VXLAN_ID"
-echo "    - IP bridge  : $IP_ADDR"
-echo "    - MAC        : $MAC_ADDR"
-echo "    - Bridge     : $BR_IF"
-echo "    - VXLAN IF   : $VXLAN_IF"
-if [[ -n "$REMOTE_IP" ]]; then
-  echo "    - Modalità   : UNICAST verso $REMOTE_IP"
-else
-  echo "    - Modalità   : MULTICAST ($MULTICAST_GROUP)"
-fi
+# MAC address statico: primi byte fissi, ultimi 3 derivati da VNI e NODE_ID
+VXLAN_MAC=$(printf '02:00:%02x:%02x:%02x:%02x' $((VXLAN_ID>>8 & 0xFF)) $((VXLAN_ID & 0xFF)) 0x00 $NODE_ID)
 
-# Crea bridge
-sudo ip link add name $BR_IF type bridge || true
-sudo ip link set $BR_IF up
 
-# Crea interfaccia VXLAN
-if [[ -n "$REMOTE_IP" ]]; then
-  sudo ip link add $VXLAN_IF type vxlan id $VXLAN_ID dev $PHYS_IF remote $REMOTE_IP dstport $VXLAN_PORT
-else
-  sudo ip link add $VXLAN_IF type vxlan id $VXLAN_ID dev $PHYS_IF group $MULTICAST_GROUP dstport $VXLAN_PORT
-fi
+echo "Creazione interfaccia VXLAN $VXLAN_IF con ID $VXLAN_ID su $PHYS_IF"
+sudo ip link add $VXLAN_IF type vxlan id $VXLAN_ID dev $PHYS_IF remote $REMOTE_IP local $LOCAL dstport 4789
 
-# MAC opzionale
-sudo ip link set dev $VXLAN_IF address $MAC_ADDR
+echo "Assegnazione MAC address $VXLAN_MAC"
+sudo ip link set dev $VXLAN_IF address $VXLAN_MAC
 
-# Connetti al bridge
-sudo ip link set $VXLAN_IF master $BR_IF
+echo "Assegnazione IP address $FINAL_IP"
+sudo ip addr add $FINAL_IP dev $VXLAN_IF
+
+echo "Attivazione interfaccia $VXLAN_IF"
 sudo ip link set $VXLAN_IF up
 
-# Altre interfacce
-IFS=',' read -ra EXTRAS <<< "$EXTRA_IFS"
-for extra_if in "${EXTRAS[@]}"; do
-  if [[ -n "$extra_if" ]]; then
-    echo "[+] Collegamento $extra_if al bridge"
-    sudo ip link set $extra_if up
-    sudo ip link set $extra_if master $BR_IF
-  fi
-done
-
-# IP alla VXLAN
-sudo ip addr add $IP_ADDR/24 dev $VXLAN_IF
-
-# Assicura l'interfaccia fisica sia attiva
-sudo ip link set $PHYS_IF up
-
-echo "[✓] VXLAN con bridge configurato con successo"
+echo "Configurazione completata!"
